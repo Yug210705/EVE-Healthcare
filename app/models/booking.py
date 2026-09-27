@@ -16,7 +16,6 @@ class BookingStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
-# Explicit allowed transitions — used by the service layer to enforce the state machine.
 BOOKING_TERMINAL_STATES = {BookingStatus.CONFIRMED, BookingStatus.FAILED, BookingStatus.CANCELLED}
 
 

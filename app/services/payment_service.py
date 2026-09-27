@@ -29,9 +29,6 @@ logger = logging.getLogger(__name__)
 def process_payment(
     db: Session, user_id: uuid.UUID, payload: PaymentCreateRequest
 ) -> Payment:
-    """Direct mock payment — simulates what a payment provider would do."""
-
-    # Lock the booking row to prevent concurrent payment/cancel races
     booking = db.execute(
         select(Booking).where(Booking.id == payload.booking_id).with_for_update()
     ).scalar_one_or_none()
@@ -47,7 +44,6 @@ def process_payment(
             f"Cannot process payment for booking in {booking.status.value} state"
         )
 
-    # Prevent double-payment: if a successful payment already exists, reject
     existing_success = db.execute(
         select(Payment).where(
             Payment.booking_id == booking.id,
@@ -57,7 +53,6 @@ def process_payment(
     if existing_success:
         raise ConflictError("A successful payment already exists for this booking")
 
-    # Simulate payment outcome
     simulated_status = (
         PaymentStatus.SUCCESS if payload.simulate == "SUCCESS" else PaymentStatus.FAILED
     )
@@ -71,7 +66,6 @@ def process_payment(
     )
     db.add(payment)
 
-    # Transition booking state
     if simulated_status == PaymentStatus.SUCCESS:
         booking.status = BookingStatus.CONFIRMED
     else:
@@ -90,22 +84,6 @@ def process_payment(
 
 
 def process_webhook(db: Session, payload: WebhookPayload) -> dict:
-    """
-    Process a payment provider webhook with two layers of idempotency:
-
-    Layer 1 — Event-level: UNIQUE(provider_event_id) prevents the same webhook
-    delivery from being processed twice, even under concurrent requests.
-    Uses a SAVEPOINT so an IntegrityError doesn't corrupt the outer transaction.
-
-    Layer 2 — Payment-level: UNIQUE(provider_reference) prevents different webhook
-    events that reference the same provider payment from creating duplicate
-    Payment rows (e.g. evt_001 and evt_002 both for pay_xyz).
-
-    The booking row is locked with SELECT FOR UPDATE before any state transition
-    to prevent conflicting concurrent updates (e.g. simultaneous SUCCESS + FAILED).
-    """
-
-    # --- Layer 1: Event deduplication via savepoint ---
     try:
         nested = db.begin_nested()  # SAVEPOINT
         event = WebhookEvent(
@@ -120,13 +98,12 @@ def process_webhook(db: Session, payload: WebhookPayload) -> dict:
         logger.info("Duplicate webhook event skipped: %s", payload.event_id)
         return {"status": "duplicate", "message": "Event already processed"}
 
-    # --- Layer 2: Payment-reference deduplication ---
     existing_payment = db.execute(
         select(Payment).where(Payment.provider_reference == payload.payment_reference)
     ).scalar_one_or_none()
 
     if existing_payment:
-        db.commit()  # Commit the webhook_event record (for audit trail)
+        db.commit()
         logger.info(
             "Duplicate payment reference skipped: %s (event: %s)",
             payload.payment_reference,
@@ -134,7 +111,6 @@ def process_webhook(db: Session, payload: WebhookPayload) -> dict:
         )
         return {"status": "duplicate", "message": "Payment already processed"}
 
-    # --- Lock booking and validate state ---
     booking = db.execute(
         select(Booking).where(Booking.id == payload.booking_id).with_for_update()
     ).scalar_one_or_none()
@@ -161,7 +137,6 @@ def process_webhook(db: Session, payload: WebhookPayload) -> dict:
             "message": f"Booking already in {booking.status.value} state",
         }
 
-    # --- Validate amount matches ---
     if payload.amount != booking.amount:
         db.commit()
         logger.warning(
@@ -172,7 +147,6 @@ def process_webhook(db: Session, payload: WebhookPayload) -> dict:
         )
         return {"status": "error", "message": "Amount mismatch"}
 
-    # --- Create payment and transition booking ---
     payment_status = (
         PaymentStatus.SUCCESS if payload.status == "SUCCESS" else PaymentStatus.FAILED
     )

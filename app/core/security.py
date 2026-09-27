@@ -25,7 +25,6 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
 
 
 def decode_access_token(token: str) -> str | None:
-    """Returns the user ID (sub claim) or None if token is invalid/expired."""
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]

@@ -7,7 +7,6 @@ from fastapi.responses import JSONResponse
 from app.api import auth, bookings, centres, payments, tests
 from app.core.exceptions import AppError
 
-# Configure structured logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",

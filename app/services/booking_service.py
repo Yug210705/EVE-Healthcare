@@ -21,27 +21,23 @@ logger = logging.getLogger(__name__)
 def create_booking(
     db: Session, user_id: uuid.UUID, payload: BookingCreateRequest
 ) -> Booking:
-    # Validate centre exists
     centre = db.execute(
         select(DiagnosticCentre).where(DiagnosticCentre.id == payload.centre_id)
     ).scalar_one_or_none()
     if not centre:
         raise NotFoundError("Diagnostic centre")
 
-    # Validate test exists
     test = db.execute(
         select(DiagnosticTest).where(DiagnosticTest.id == payload.test_id)
     ).scalar_one_or_none()
     if not test:
         raise NotFoundError("Diagnostic test")
 
-    # Validate the test belongs to the specified centre
     if test.centre_id != centre.id:
         raise ConflictError(
             f"Test '{test.name}' is not offered by centre '{centre.name}'"
         )
 
-    # Validate appointment is in the future
     if payload.appointment_at <= datetime.now(timezone.utc):
         raise ConflictError("Appointment must be in the future")
 
@@ -50,7 +46,7 @@ def create_booking(
         test_id=test.id,
         centre_id=centre.id,
         appointment_at=payload.appointment_at,
-        amount=test.price,  # Derived from test, never client-provided
+        amount=test.price,
     )
     db.add(booking)
     db.commit()

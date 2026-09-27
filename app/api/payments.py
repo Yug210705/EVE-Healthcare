@@ -19,11 +19,6 @@ logger = logging.getLogger(__name__)
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Process a simulated payment for a booking",
-    description=(
-        "Creates a payment and updates booking status. "
-        "Use the `simulate` field to control the mock outcome (SUCCESS or FAILED). "
-        "Amount is derived from the booking — not client-controlled."
-    ),
 )
 def create_payment(
     payload: PaymentCreateRequest,
@@ -37,11 +32,6 @@ def create_payment(
     "/webhook/",
     response_model=WebhookResponse,
     summary="Payment provider webhook endpoint",
-    description=(
-        "Receives payment notifications from the (simulated) payment provider. "
-        "Idempotent: repeated delivery of the same event_id is safe. "
-        "No authentication — real providers would use signature verification."
-    ),
 )
 def payment_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
     result = payment_service.process_webhook(db, payload)
